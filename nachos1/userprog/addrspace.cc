@@ -1,6 +1,6 @@
 // addrspace.cc 
 //	Routines to manage address spaces (executing user programs).
-//
+///
 //	In order to run a user program, you must:
 //
 //	1. link with the -N -T 0 option 
@@ -27,13 +27,50 @@
 //----------------------------------------------------------------------
 void AddrSpace::LoadPage(int pageNum, int frameIndex)
 {
-    pageTable[pageNum].valid = true; //Se pone en valida por que esta en memoria
-    pageTable[pageNum].use = true; //La pagina esta siendo referenciada
+    pageTable[pageNum].valid = TRUE; //Se pone en valida por que esta en memoria
+    pageTable[pageNum].use = TRUE; //La pagina esta siendo referenciada
     pageTable[pageNum].physicalPage = frameIndex;//la direccion física es igual al indice del marco
+   // pageTable[pageNum].virtualPage 
+   // FrameTable[frameIndex] = &pageTable[pageNum];
     bzero((&machine->mainMemory[pageTable[pageNum].physicalPage*PageSize]),PageSize);
     swapFile->ReadAt(&machine->mainMemory[pageTable[pageNum].physicalPage*PageSize],PageSize,PageSize*pageNum);
     stats->numDiskReads++;
+    printf("virtual page = %d\n",pageTable[pageNum].virtualPage);
 }
+//----------------------------------------------------------------------
+// SwapPage
+// 	Carga la página requerida en memoria leyendo 
+//	del archivo de intercambio
+//----------------------------------------------------------------------
+void AddrSpace::SwapPage(int pageNum, int victim)
+{
+    int pagReq = this->PageLookUp(victim);
+    pageTable[pagReq].valid = FALSE;
+    pageTable[pagReq].use = FALSE;
+    if(pageTable[pagReq].dirty == TRUE)
+    {                
+        swapFile->WriteAt(&(machine->mainMemory[pageTable[pagReq].physicalPage*PageSize]),PageSize,PageSize*pageTable[pagReq].virtualPage);              
+        pageTable[pagReq].dirty = FALSE;
+        stats->numDiskWrites++;
+    }
+    pageTable[pagReq].physicalPage = -1;
+    LoadPage(pageNum,victim);            
+    printf("Se reemplazo la pagina: [%d] del marco: [%d] con la pagina: [%d]\n",pageTable[pagReq].virtualPage,victim,pageNum);
+}
+int AddrSpace::PageLookUp(int page)
+{
+    int i;
+    for(i = 0;  i < numPages; i++)
+    {
+        if(pageTable[i].physicalPage == page && pageTable[i].valid == true)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+
 //----------------------------------------------------------------------
 // SwapHeader
 // 	Do little endian to big endian conversion on the bytes in the 
@@ -76,14 +113,16 @@ AddrSpace::AddrSpace(OpenFile *executable, char *filename)
 {
     NoffHeader noffH;
     unsigned int i, size;
- 
+
     /*****************************************<----Variables utlizadas para la SWAP---->*****************************************/
+    this->nextFrame = 0;
     char *swpFilename = NULL; 					/*Nombre del archivo de intercambio*/
     char *fileData = NULL; 					/*Bytes que se escribirán en la SWAP*/
     swpFilename = strcat(filename,".swp");			/*Extensión del archivo*/
     ASSERT(fileSystem->Create(swpFilename,50));			/*Creación del archivo*/
     swapFile = fileSystem->Open(swpFilename);			/*Asignación al apuntador al archivo*/
     executable->ReadAt((char *)&noffH, sizeof(noffH), 0);	/*Se lee el programa con toda su información*/	
+    
     /***************************************************************************************************************************/
 
    
@@ -119,7 +158,7 @@ AddrSpace::AddrSpace(OpenFile *executable, char *filename)
     pageTable = new TranslationEntry[numPages];
     for (i = 0; i < numPages; i++) {
 	pageTable[i].virtualPage = i;	// for now, virtual page # = phys page #
-	pageTable[i].physicalPage = i;
+	pageTable[i].physicalPage = -1;
 	pageTable[i].valid = FALSE;
 	pageTable[i].use = FALSE;
 	pageTable[i].dirty = FALSE;

@@ -27,15 +27,17 @@ class AddrSpace {
     OpenFile *swapFile; 	        //Apuntador al archivo de intercambio
     void InitRegisters();		// Initialize user-level CPU registers,
 					// before jumping to user code
-
     void SaveState();			// Save/restore address space-specific
     void RestoreState();		// info on a context switch 
     void LoadPage(int pageNum, int frameIndex);//Carga la pagina requerida
-  private:
-    TranslationEntry *pageTable;	// Assume linear page table translation
-					// for now!
+    void SwapPage(int pageNum, int victim);//Reemplaza la pagina requerida
+    int PageLookUp(int page);
     unsigned int numPages;		// Number of pages in the virtual 
 					// address space
+    TranslationEntry *pageTable;	// Assume linear page table translation
+					// for now!
+    int nextFrame;
+   
 };
 
 #endif // ADDRSPACE_H

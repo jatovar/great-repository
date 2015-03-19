@@ -55,7 +55,7 @@
 
 
 // External functions used by this file
-
+int algoritmo;
 extern void ThreadTest(void), Copy(char *unixFile, char *nachosFile);
 extern void Print(char *file), PerformanceTest(void);
 extern void StartProcess(char *file), ConsoleTest(char *in, char *out);
@@ -94,9 +94,14 @@ main(int argc, char **argv)
             printf (copyright);
 #ifdef USER_PROGRAM
         if (!strcmp(*argv, "-x")) {        	// run a user program
+            if(!strcmp(*(argv+1),"-R"))
+            {
+                algoritmo = 1;
+                //getchar();
+            }
 	    ASSERT(argc > 1);
-            StartProcess(*(argv + 1));
-            argCount = 2;
+            StartProcess(*(argv + 2));
+            argCount = 3;
         } else if (!strcmp(*argv, "-c")) {      // test the console
 	    if (argc == 1)
 	        ConsoleTest(NULL, NULL);
