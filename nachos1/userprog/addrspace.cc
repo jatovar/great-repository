@@ -1,6 +1,6 @@
 // addrspace.cc 
 //	Routines to manage address spaces (executing user programs).
-///
+//
 //	In order to run a user program, you must:
 //
 //	1. link with the -N -T 0 option 
@@ -19,57 +19,6 @@
 #include "system.h"
 #include "addrspace.h"
 #include "noff.h"
-
-//----------------------------------------------------------------------
-// LoadPage
-// 	Carga la página requerida en memoria leyendo 
-//	del archivo de intercambio
-//----------------------------------------------------------------------
-void AddrSpace::LoadPage(int pageNum, int frameIndex)
-{
-    pageTable[pageNum].valid = TRUE; //Se pone en valida por que esta en memoria
-    pageTable[pageNum].use = TRUE; //La pagina esta siendo referenciada
-    pageTable[pageNum].physicalPage = frameIndex;//la direccion física es igual al indice del marco
-   // pageTable[pageNum].virtualPage 
-   // FrameTable[frameIndex] = &pageTable[pageNum];
-    bzero((&machine->mainMemory[pageTable[pageNum].physicalPage*PageSize]),PageSize);
-    swapFile->ReadAt(&machine->mainMemory[pageTable[pageNum].physicalPage*PageSize],PageSize,PageSize*pageNum);
-    stats->numDiskReads++;
-    printf("virtual page = %d\n",pageTable[pageNum].virtualPage);
-}
-//----------------------------------------------------------------------
-// SwapPage
-// 	Carga la página requerida en memoria leyendo 
-//	del archivo de intercambio
-//----------------------------------------------------------------------
-void AddrSpace::SwapPage(int pageNum, int victim)
-{
-    int pagReq = this->PageLookUp(victim);
-    pageTable[pagReq].valid = FALSE;
-    pageTable[pagReq].use = FALSE;
-    if(pageTable[pagReq].dirty == TRUE)
-    {                
-        swapFile->WriteAt(&(machine->mainMemory[pageTable[pagReq].physicalPage*PageSize]),PageSize,PageSize*pageTable[pagReq].virtualPage);              
-        pageTable[pagReq].dirty = FALSE;
-        stats->numDiskWrites++;
-    }
-    pageTable[pagReq].physicalPage = -1;
-    LoadPage(pageNum,victim);            
-    printf("Se reemplazo la pagina: [%d] del marco: [%d] con la pagina: [%d]\n",pageTable[pagReq].virtualPage,victim,pageNum);
-}
-int AddrSpace::PageLookUp(int page)
-{
-    int i;
-    for(i = 0;  i < numPages; i++)
-    {
-        if(pageTable[i].physicalPage == page && pageTable[i].valid == true)
-        {
-            return i;
-        }
-    }
-    return -1;
-}
-
 
 //----------------------------------------------------------------------
 // SwapHeader
@@ -108,89 +57,14 @@ SwapHeader (NoffHeader *noffH)
 //	"executable" is the file containing the object code to load into memory
 //----------------------------------------------------------------------
 
-
-AddrSpace::AddrSpace(OpenFile *executable, char *filename)
-{
-    NoffHeader noffH;
-    unsigned int i, size;
-
-    /*****************************************<----Variables utlizadas para la SWAP---->*****************************************/
-    this->nextFrame = 0;
-    char *swpFilename = NULL; 					/*Nombre del archivo de intercambio*/
-    char *fileData = NULL; 					/*Bytes que se escribirán en la SWAP*/
-    swpFilename = strcat(filename,".swp");			/*Extensión del archivo*/
-    ASSERT(fileSystem->Create(swpFilename,50));			/*Creación del archivo*/
-    swapFile = fileSystem->Open(swpFilename);			/*Asignación al apuntador al archivo*/
-    executable->ReadAt((char *)&noffH, sizeof(noffH), 0);	/*Se lee el programa con toda su información*/	
-    
-    /***************************************************************************************************************************/
-
-   
-    /**************************************<----Lectura y escritura de la SWAP---->*********************************************/
-    fileData = new char[noffH.code.size+noffH.initData.size]; 		  /*Inicializamos el arreglo con el tamaño de los datos + código*/
-    executable->ReadAt(fileData,(noffH.code.size+noffH.initData.size),    /*del proceso*/
-    noffH.code.inFileAddr); 						  /*Leemos el bloque de bytes desde la posición del encabezado*/
-    swapFile->WriteAt(fileData,(noffH.code.size+noffH.initData.size),0);  /*Escribimos en el archivo de intercambio*/
-    delete (fileData);					  /*Libera la memoria utlizada*/
-    /***************************************************************************************************************************/
-
-
-    if ((noffH.noffMagic != NOFFMAGIC) && 
-		(WordToHost(noffH.noffMagic) == NOFFMAGIC))
-    	SwapHeader(&noffH);
-    ASSERT(noffH.noffMagic == NOFFMAGIC);
-
-// how big is address space?
-    size = noffH.code.size + noffH.initData.size + noffH.uninitData.size 
-			+ UserStackSize;	// we need to increase the size
-						// to leave room for the stack
-    numPages = divRoundUp(size, PageSize);
-    size = numPages * PageSize;
-
-    ///ASSERT(numPages <= NumPhysPages);		// check we're not trying
-						// to run anything too big --
-						// at least until we have
-						// virtual memory
-
-    DEBUG('a', "Initializing address space, num pages %d, size %d\n", 
-					numPages, size);
-// first, set up the translation 
-    pageTable = new TranslationEntry[numPages];
-    for (i = 0; i < numPages; i++) {
-	pageTable[i].virtualPage = i;	// for now, virtual page # = phys page #
-	pageTable[i].physicalPage = -1;
-	pageTable[i].valid = FALSE;
-	pageTable[i].use = FALSE;
-	pageTable[i].dirty = FALSE;
-	pageTable[i].readOnly = FALSE;  // if the code segment was entirely on 
-					// a separate page, we could set its 
-					// pages to be read-only
-    }
-    
-// zero out the entire address space, to zero the unitialized data segment 
-// and the stack segment
-    //bzero(machine->mainMemory, size);
-
-// then, copy in the code and data segments into memory
-   /* if (noffH.code.size > 0) {
-        DEBUG('a', "Initializing code segment, at 0x%x, size %d\n", 
-			noffH.code.virtualAddr, noffH.code.size);
-        executable->ReadAt(&(machine->mainMemory[noffH.code.virtualAddr]),
-			noffH.code.size, noffH.code.inFileAddr);
-    }
-    if (noffH.initData.size > 0) {
-        DEBUG('a', "Initializing data segment, at 0x%x, size %d\n", 
-			noffH.initData.virtualAddr, noffH.initData.size);
-        executable->ReadAt(&(machine->mainMemory[noffH.initData.virtualAddr]),
-			noffH.initData.size, noffH.initData.inFileAddr);
-    }*/
-
-}
-/*
 AddrSpace::AddrSpace(OpenFile *executable)
 {
     NoffHeader noffH;
     unsigned int i, size;
+
+	cadReferencia = new List();
+	marcos = 0;
+	
 
     executable->ReadAt((char *)&noffH, sizeof(noffH), 0);
     if ((noffH.noffMagic != NOFFMAGIC) && 
@@ -202,10 +76,13 @@ AddrSpace::AddrSpace(OpenFile *executable)
     size = noffH.code.size + noffH.initData.size + noffH.uninitData.size 
 			+ UserStackSize;	// we need to increase the size
 						// to leave room for the stack
+	printf("\nTamaño real en bytes: %d\n", size);
     numPages = divRoundUp(size, PageSize);
     size = numPages * PageSize;
+	printf("Tamaño final en bytes: %d\n", size);
+	printf("Numero de paginas: %d\n\n", numPages);
 
-    ASSERT(numPages <= NumPhysPages);		// check we're not trying
+    //ASSERT(numPages <= NumPhysPages);		// check we're not trying
 						// to run anything too big --
 						// at least until we have
 						// virtual memory
@@ -217,34 +94,29 @@ AddrSpace::AddrSpace(OpenFile *executable)
     for (i = 0; i < numPages; i++) {
 	pageTable[i].virtualPage = i;	// for now, virtual page # = phys page #
 	pageTable[i].physicalPage = i;
-	pageTable[i].valid = TRUE;
+	pageTable[i].valid = FALSE;	//Sin paginas en memoria para paginacion pura
 	pageTable[i].use = FALSE;
 	pageTable[i].dirty = FALSE;
 	pageTable[i].readOnly = FALSE;  // if the code segment was entirely on 
 					// a separate page, we could set its 
 					// pages to be read-only
     }
-    
-// zero out the entire address space, to zero the unitialized data segment 
-// and the stack segment
-    bzero(machine->mainMemory, size);
-
-// then, copy in the code and data segments into memory
-    if (noffH.code.size > 0) {
-        DEBUG('a', "Initializing code segment, at 0x%x, size %d\n", 
-			noffH.code.virtualAddr, noffH.code.size);
-        executable->ReadAt(&(machine->mainMemory[noffH.code.virtualAddr]),
-			noffH.code.size, noffH.code.inFileAddr);
-    }
-    if (noffH.initData.size > 0) {
-        DEBUG('a', "Initializing data segment, at 0x%x, size %d\n", 
-			noffH.initData.virtualAddr, noffH.initData.size);
-        executable->ReadAt(&(machine->mainMemory[noffH.initData.virtualAddr]),
-			noffH.initData.size, noffH.initData.inFileAddr);
-    }
-
+	if (noffH.code.size > 0) {	//se copia todo el codigo a un buffer temporal y se escribe a archivo
+	        DEBUG('a', "Initializing code segment, at 0x%x, size %d\n", noffH.code.virtualAddr, noffH.code.size);
+		swapBuff = new char[noffH.code.size];
+            	executable->ReadAt(swapBuff, noffH.code.size, noffH.code.inFileAddr);
+            	swap->WriteAt(swapBuff, noffH.code.size, 0);
+            	delete swapBuff;
+    	}
+    	if (noffH.initData.size > 0) {	//Se copian los datos enseguida del codigo en archivo
+        	DEBUG('a', "Initializing data segment, at 0x%x, size %d\n", noffH.initData.virtualAddr, noffH.initData.size);
+            	swapBuff = new char[noffH.initData.size];
+            	executable->ReadAt(swapBuff, noffH.initData.size, noffH.initData.inFileAddr);
+            	swap->WriteAt(swapBuff, noffH.initData.size, swap->Length());
+            	delete swapBuff;
+    	}
 }
-*/
+
 //----------------------------------------------------------------------
 // AddrSpace::~AddrSpace
 // 	Dealloate an address space.  Nothing for now!
@@ -253,7 +125,6 @@ AddrSpace::AddrSpace(OpenFile *executable)
 AddrSpace::~AddrSpace()
 {
    delete pageTable;
-   delete swapFile;
 }
 
 //----------------------------------------------------------------------

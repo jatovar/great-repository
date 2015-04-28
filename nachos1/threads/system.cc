@@ -17,7 +17,7 @@ Scheduler *scheduler;			// the ready list
 Interrupt *interrupt;			// interrupt status
 Statistics *stats;			// performance metrics
 Timer *timer;				// the hardware timer device,
-					// for invoking context switches
+					// for invoking context switche
 
 #ifdef FILESYS_NEEDED
 FileSystem  *fileSystem;
@@ -29,6 +29,13 @@ SynchDisk   *synchDisk;
 
 #ifdef USER_PROGRAM	// requires either FILESYS or FILESYS_STUB
 Machine *machine;	// user program memory and registers
+OpenFile* swap;
+char* intercambioArch;
+char* swapBuff;
+int algReemplazo;	//Seleccion del algoritmo de reemplazo
+List* cadReferencia;	//Lista con la cadena de referencia
+int marcos;		//Marcos usados
+int pagRequerida;	//Pagina que genero el fallo
 #endif
 
 #ifdef NETWORK

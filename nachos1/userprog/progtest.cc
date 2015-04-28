@@ -14,24 +14,33 @@
 #include "addrspace.h"
 #include "synch.h"
 
+extern unsigned int numeroDePaginas = 0;
 //----------------------------------------------------------------------
 // StartProcess
 // 	Run a user program.  Open the executable, load it into
 //	memory, and jump to it.
 //----------------------------------------------------------------------
 
-void
-StartProcess(char *filename)
+void StartProcess(char *filename)
 {
     OpenFile *executable = fileSystem->Open(filename);
     AddrSpace *space;
-
+    
     if (executable == NULL) {
 	printf("Unable to open file %s\n", filename);
 	return;
     }
-    //space = new AddrSpace(executable);  
-    space = new AddrSpace(executable,filename);  //Se modifico el constructor para mandar por parámetro el nombre del archivo
+    	intercambioArch = new char[strlen(filename)+6];
+    	strcpy(intercambioArch, filename);
+    	strcat(intercambioArch, ".swp");
+    	if (fileSystem->Create(intercambioArch, 0)){
+    		swap = fileSystem->Open(intercambioArch);
+	}
+	else{
+		printf("Error al crear archivo de intercambio");
+		return;	
+	}
+    space = new AddrSpace(executable);
     currentThread->space = space;
 
     delete executable;			// close file

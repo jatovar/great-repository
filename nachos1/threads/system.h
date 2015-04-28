@@ -31,7 +31,15 @@ extern Timer *timer;				// the hardware alarm clock
 
 #ifdef USER_PROGRAM
 #include "machine.h"
+#include "openfile.h"
 extern Machine* machine;	// user program memory and registers
+extern OpenFile* swap;
+extern char* intercambioArch;
+extern char* swapBuff;
+extern int algReemplazo;
+extern List* cadReferencia;
+extern int marcos;
+extern int pagRequerida;
 #endif
 
 #ifdef FILESYS_NEEDED 		// FILESYS or FILESYS_STUB 

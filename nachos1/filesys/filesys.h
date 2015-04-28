@@ -76,7 +76,15 @@ class FileSystem {
 
     bool Create(char *name, int initialSize);  	
 					// Create a file (UNIX creat)
-
+    bool CreaUsuario(char *name, int initialSize);	//Crea un usuario en MFD
+    bool CreaUFD(char* nombreDirectorio, int initialSize);	//Crea un UFD para un usuario
+    bool CreaArchivo(char *nomUsuario, char* nomArch, int initialSize);	//Crea un archivo para un UFD
+    OpenFile* Abrir(char* nomDirectorio, char* nomArch);	//Abre un archivo para escritura
+    bool ExisteUsuario(char* nomUsuario);	//Verifica si hay una incidencia con un usuario dado
+    bool RemueveUsuario(char *nomUsuario);	//Borra el usuario del MFD
+    bool RemueveUFD(char *nomUsuario);		//Borra el UFD para un usuario
+    bool RemueveArchivos(char *nomUsuario);	//Borra todos los archivos de un UFD
+    void listaArchivos(char *nomUsuario);
     OpenFile* Open(char *name); 	// Open a file (UNIX open)
 
     bool Remove(char *name);  		// Delete a file (UNIX unlink)
@@ -84,7 +92,6 @@ class FileSystem {
     void List();			// List all the files in the file system
 
     void Print();			// List all the files and their contents
-
   private:
    OpenFile* freeMapFile;		// Bit map of free disk blocks,
 					// represented as a file

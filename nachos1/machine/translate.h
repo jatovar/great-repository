@@ -20,7 +20,7 @@
 
 #include "copyright.h"
 #include "utility.h"
-#include "filesys.h"
+
 // The following class defines an entry in a translation table -- either
 // in a page table or a TLB.  Each entry defines a mapping from one 
 // virtual page to one physical page.
@@ -40,6 +40,7 @@ class TranslationEntry {
 			// page is referenced or modified.
     bool dirty;         // This bit is set by the hardware every time the
 			// page is modified.
+    int lastUse;        //last time it was used.
 };
 
 #endif

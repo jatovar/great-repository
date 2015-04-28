@@ -45,7 +45,7 @@
 // Copyright (c) 1992-1993 The Regents of the University of California.
 // All rights reserved.  See copyright.h for copyright notice and limitation 
 // of liability and disclaimer of warranty provisions.
-
+//switch
 #define MAIN
 #include "copyright.h"
 #undef MAIN
@@ -55,9 +55,9 @@
 
 
 // External functions used by this file
-int algoritmo;
+
 extern void ThreadTest(void), Copy(char *unixFile, char *nachosFile);
-extern void Print(char *file), PerformanceTest(void);
+extern void Print(char *file), PerformanceTest(void), Shell(void);
 extern void StartProcess(char *file), ConsoleTest(char *in, char *out);
 extern void MailTest(int networkID);
 
@@ -87,21 +87,28 @@ main(int argc, char **argv)
 #ifdef THREADS
     ThreadTest();
 #endif
-
     for (argc--, argv++; argc > 0; argc -= argCount, argv += argCount) {
 	argCount = 1;
         if (!strcmp(*argv, "-z"))               // print copyright
             printf (copyright);
 #ifdef USER_PROGRAM
-        if (!strcmp(*argv, "-x")) {        	// run a user program
-            if(!strcmp(*(argv+1),"-R"))
-            {
-                algoritmo = 1;
-                //getchar();
-            }
-	    ASSERT(argc > 1);
-            StartProcess(*(argv + 2));
-            argCount = 3;
+        if (!strcmp(*argv, "-x")){        	// run a user program
+	    if (!strcmp(*(argv+1), "-f") || !strcmp(*(argv+1), "-l") || !strcmp(*(argv+1), "-o")){
+		if (!strcmp(*(argv+1), "-f"))
+		    algReemplazo = 1;	//FIFO
+		if (!strcmp(*(argv+1), "-l"))
+		    algReemplazo = 2;	//LRU
+		if (!strcmp(*(argv+1), "-o"))
+		    algReemplazo = 3;	//Optimo
+		ASSERT(argc > 2);
+           	StartProcess(*(argv + 2));
+            	argCount = 3;
+	    }
+	    else{
+	    	ASSERT(argc > 1);
+           	StartProcess(*(argv + 1));
+            	argCount = 2;
+	    }
         } else if (!strcmp(*argv, "-c")) {      // test the console
 	    if (argc == 1)
 	        ConsoleTest(NULL, NULL);
@@ -134,6 +141,8 @@ main(int argc, char **argv)
             fileSystem->Print();
 	} else if (!strcmp(*argv, "-t")) {	// performance test
             PerformanceTest();
+	} else if (!strcmp(*argv, "-ter")){
+		Shell();
 	}
 #endif // FILESYS
 #ifdef NETWORK

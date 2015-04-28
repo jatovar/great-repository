@@ -193,7 +193,7 @@ FileSystem::Create(char *name, int initialSize)
         sector = freeMap->Find();	// find a sector to hold the file header
     	if (sector == -1) 		
             success = FALSE;		// no free block for file header 
-        else if (!directory->Add(name, sector))
+        else if (!directory->Add(name, sector, false))
             success = FALSE;	// no space in directory
 	else {
     	    hdr = new FileHeader;
@@ -211,6 +211,148 @@ FileSystem::Create(char *name, int initialSize)
         delete freeMap;
     }
     delete directory;
+    return success;
+}
+//Registra un usuario en MFD
+bool FileSystem::CreaUsuario(char *name, int initialSize)
+{
+    Directory *directory;
+    BitMap *freeMap;
+    FileHeader *hdr;
+    int sector;
+    bool success;
+
+    DEBUG('f', "Creating file %s, size %d\n", name, initialSize);
+    directory = new Directory(NumDirEntries);
+    directory->FetchFrom(directoryFile);
+    initialSize = directory->tamDirEntry();
+    if (directory->Find(name) != -1)
+      success = FALSE;			// file is already in directory
+    else {	
+        freeMap = new BitMap(NumSectors);
+        freeMap->FetchFrom(freeMapFile);
+        sector = freeMap->Find();	// find a sector to hold the file header
+    	if (sector == -1) 		
+            success = FALSE;		// no free block for file header 
+        else if (!directory->Add(name, sector, true))
+            success = FALSE;	// no space in directory
+	else {
+    	    hdr = new FileHeader;
+	    if (!hdr->Allocate(freeMap, initialSize))
+            	success = FALSE;	// no space on disk for data
+	    else {
+	    	success = TRUE;
+		// everthing worked, flush all changes back to disk
+    	    	hdr->WriteBack(sector); 		
+    	    	directory->WriteBack(directoryFile);
+    	    	freeMap->WriteBack(freeMapFile);
+	    }
+            delete hdr;
+	}
+        delete freeMap;
+    }
+    delete directory;
+    return success;
+}
+//Crea el UFD para un Usuario registrado en MFD
+bool FileSystem::CreaUFD(char* nombreUsuario, int initialSize){
+    Directory *directory;
+    Directory *ufd;
+    OpenFile* UfdFile = NULL;
+    BitMap *freeMap;
+    FileHeader *hdr;
+    int sector;
+    bool success;
+
+    DEBUG('f', "Creating file %s, size %d\n", nombreUsuario, initialSize);
+	
+    directory = new Directory(NumDirEntries);	//Crea Directorio MFD
+    initialSize = directory->tamDirEntry();
+    directory->FetchFrom(this->directoryFile);	//Recupera Directorio MFD
+    ufd = new Directory(NumDirEntries);		//Crea Directorio UFD
+    if (directory->Find(nombreUsuario) != -1){	//Si se encontro al usuario dentro de MFD
+    	freeMap = new BitMap(NumSectors);
+        freeMap->FetchFrom(freeMapFile);
+        sector = freeMap->Find();	// find a sector to hold the file header
+    	if (sector == -1) 		
+            success = FALSE;		// no free block for file header 
+        else {
+	    	UfdFile = new OpenFile(sector);
+		if (UfdFile)
+		{
+	    	    hdr = new FileHeader;
+		    if (!hdr->Allocate(freeMap, initialSize))
+		    	success = FALSE;	// no space on disk for data
+		    else {
+		    	success = TRUE;
+			// everthing worked, flush all changes back to disk
+			directory->setApuntadorUFD(nombreUsuario, sector);
+	    	    	hdr->WriteBack(sector);
+			ufd->WriteBack(UfdFile);
+			directory->WriteBack(directoryFile);
+	    	    	freeMap->WriteBack(freeMapFile);
+			}
+		    delete hdr;
+		    delete freeMap;
+		}
+	}
+    }
+    delete ufd;
+    delete UfdFile;
+    delete directory;
+    return success;
+}
+//Crea un archivo en UFD de un usuario dado con un tamaño dado
+bool FileSystem::CreaArchivo(char *nomUsuario, char* nomArch, int initialSize)
+{
+    Directory *directory;
+    BitMap *freeMap;
+    FileHeader *hdr;
+    int sector;
+    bool success;
+    OpenFile* arch;
+    Directory* ufd;
+    int apUfd;
+
+    DEBUG('f', "Creating file %s, size %d\n", nomArch, initialSize);
+
+    directory = new Directory(NumDirEntries);
+    directory->FetchFrom(this->directoryFile);
+    apUfd = directory->getApuntadorUFD(nomUsuario);
+    if (apUfd != -1){					//No encontro UFD disponible
+	    arch = new OpenFile(apUfd);
+	    ufd = new Directory(NumDirEntries);
+	    ufd->FetchFrom(arch);
+	    if (directory->Find(nomUsuario) != -1)	//Si encuentra al usuario
+		if (ufd->Find(nomArch) != -1)		//Si no encuentra el archivo
+			success = FALSE;		// file is already in directory
+	    	else{
+			freeMap = new BitMap(NumSectors);
+			freeMap->FetchFrom(freeMapFile);
+			sector = freeMap->Find();	// find a sector to hold the file header
+		    	if (sector == -1) 		
+			    success = FALSE;		// no free block for file header 
+			else if (!ufd->Add(nomArch, sector, false))
+			    success = FALSE;	// no space in directory
+			else {
+		    	    hdr = new FileHeader;
+			    if (!hdr->Allocate(freeMap, initialSize))
+			    	success = FALSE;	// no space on disk for data
+			    else {	
+			    	success = TRUE;
+				// everthing worked, flush all changes back to disk
+		    	    	hdr->WriteBack(sector);
+		    	    	ufd->WriteBack(arch);
+		    	    	freeMap->WriteBack(freeMapFile);
+			    }
+			    delete hdr;
+			delete freeMap;
+			}
+	    	}
+    }
+    delete ufd;
+    delete directory;
+    printf("Archivo Creado\n");
     return success;
 }
 
@@ -238,6 +380,38 @@ FileSystem::Open(char *name)
 	openFile = new OpenFile(sector);	// name was found in directory 
     delete directory;
     return openFile;				// return NULL if not found
+}
+
+
+OpenFile* FileSystem::Abrir(char* nomUsuario, char* nomArch)	//Abre un archivo para su escritura
+{ 
+    Directory* mfd = new Directory(NumDirEntries);
+    Directory* ufd = new Directory(NumDirEntries);
+    OpenFile *openFile = NULL;
+    OpenFile* directUFD;
+    int sector;
+
+    DEBUG('f', "Opening file %s\n", nomArch);
+    mfd->FetchFrom(directoryFile);
+    directUFD = new OpenFile(mfd->getApuntadorUFD(nomUsuario));	//Se retorna la direccion de UFD
+    ufd->FetchFrom(directUFD);				//Se recupera UFD desde el disco
+    sector = ufd->Find(nomArch);
+    if (sector >= 0) 		
+	openFile = new OpenFile(sector);	// name was found in directory 
+    delete ufd;
+    delete mfd;
+    return openFile;				// return NULL if not found
+}
+
+bool FileSystem::ExisteUsuario(char* nomUsuario){	//Revisa si existe un usuario en MFD
+	bool res = false;
+	Directory* mfd = new Directory(NumDirEntries);
+
+	mfd->FetchFrom(directoryFile);
+	if (mfd->Find(nomUsuario) != -1)	//Lo busca e informa si existe o no
+		res = true;
+	delete mfd;
+	return res;
 }
 
 //----------------------------------------------------------------------
@@ -286,6 +460,130 @@ FileSystem::Remove(char *name)
     delete freeMap;
     return TRUE;
 } 
+
+bool FileSystem::RemueveUsuario(char *nomUsuario)	//Borra Usuario del MFD
+{ 
+    Directory *mfd;
+    BitMap *freeMap;
+    FileHeader *fileHdr;
+    int sector;
+    
+    mfd = new Directory(NumDirEntries);
+    mfd->FetchFrom(this->directoryFile);
+    sector = mfd->Find(nomUsuario);
+	printf ("NomUsuario: %s\tSector: %d\n", nomUsuario, sector);
+    if (sector == -1) {
+       delete mfd;
+       return FALSE;			 // file not found 
+    }
+    fileHdr = new FileHeader;
+    fileHdr->FetchFrom(sector);
+    freeMap = new BitMap(NumSectors);
+    freeMap->FetchFrom(freeMapFile);
+    fileHdr->Deallocate(freeMap);  		// remove data blocks
+    freeMap->Clear(sector);			// remove header block
+    mfd->Remove(nomUsuario);
+    freeMap->WriteBack(freeMapFile);		// flush to disk
+    mfd->WriteBack(directoryFile);        	// flush to disk
+    delete fileHdr;
+    delete mfd;
+    delete freeMap;
+    return TRUE;
+}
+
+bool FileSystem::RemueveUFD(char *nomUsuario)	//Remueve el directorio UFD del usuario dado
+{ 
+    Directory *mfd;
+    Directory* ufd;
+    OpenFile* ufdArch;
+    BitMap *freeMap;
+    FileHeader *fileHdr;
+    int sector;
+    
+    mfd = new Directory(NumDirEntries);
+    mfd->FetchFrom(this->directoryFile);
+    sector = mfd->getApuntadorUFD(nomUsuario);		//Regresa la direccion del UFD para borrarlo
+    ufdArch = new OpenFile(sector);
+    ufd = new Directory(NumDirEntries);
+    ufd->FetchFrom(ufdArch);
+    if (sector == -1) {
+       delete mfd;
+       return FALSE;			 // file not found 
+    }
+    fileHdr = new FileHeader;
+    fileHdr->FetchFrom(sector);
+    freeMap = new BitMap(NumSectors);
+    freeMap->FetchFrom(freeMapFile);
+    fileHdr->Deallocate(freeMap);  		// remove data blocks
+    freeMap->Clear(sector);			// remove header block
+    freeMap->WriteBack(freeMapFile);		// flush to disk
+    ufd->WriteBack(directoryFile);        	// flush to disk
+    delete ufdArch;
+    delete ufd;
+    delete fileHdr;
+    delete mfd;
+    delete freeMap;
+    return TRUE;
+} 
+
+bool FileSystem::RemueveArchivos(char *nomUsuario)	//Borra todos los archivos del usuario
+{ 
+    Directory *mfd;
+    Directory* ufd;
+    OpenFile* ufdArch;
+    BitMap *freeMap;
+    FileHeader *fileHdr;
+    int sector;
+    char* nomArch;
+    bool res = true;
+    
+    mfd = new Directory(NumDirEntries);
+    mfd->FetchFrom(directoryFile);
+    ufd = new Directory(NumDirEntries);
+    ufdArch = new OpenFile(mfd->getApuntadorUFD(nomUsuario));
+    ufd->FetchFrom(ufdArch);
+    for (int i = 0; i < NumDirEntries; i++){	//Se itera sobre cada una de las entradas de la tabla
+	    nomArch = ufd->sectorIndex(i);	//Para borrar todos los archivos que tiene el usuario dado
+	    sector = ufd->Find(nomArch);
+	    if (sector != -1) {			//Si el sector es valido
+		    fileHdr = new FileHeader;	//Se actualiza el mapa de bits y la cabecera de archivo
+		    fileHdr->FetchFrom(sector);
+		    freeMap = new BitMap(NumSectors);
+		    freeMap->FetchFrom(freeMapFile);
+		    fileHdr->Deallocate(freeMap);  		// remove data blocks
+		    freeMap->Clear(sector);			// remove header block
+		    ufd->Remove(nomArch);
+		    freeMap->WriteBack(freeMapFile);		// flush to disk
+		    ufd->WriteBack(ufdArch);        	// flush to disk
+		    delete fileHdr;
+		    delete freeMap;
+	    }
+    }
+    for (int i = 0; i < NumDirEntries && res; i++)	//Confirmacion de borrado
+	if (ufd->valid(i))		//Si existe alguno todavia en uso, el borrado fue incorrecto
+		res = false;		//Se informa del error
+    delete ufd;
+    delete mfd;
+    return res;
+}
+
+void FileSystem::listaArchivos(char *nomUsuario){
+	Directory *mfd;
+	Directory* ufd;
+	OpenFile* ufdArch;
+	BitMap *freeMap;
+	FileHeader *fileHdr;
+	int sector;
+
+	mfd = new Directory(NumDirEntries);
+	mfd->FetchFrom(this->directoryFile);
+	sector = mfd->getApuntadorUFD(nomUsuario);		//Regresa la direccion del UFD para borrarlo
+	ufdArch = new OpenFile(sector);
+	ufd = new Directory(NumDirEntries);
+	ufd->FetchFrom(ufdArch);
+	ufd->listaArchivos();
+}
+
 
 //----------------------------------------------------------------------
 // FileSystem::List

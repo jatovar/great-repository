@@ -8,10 +8,6 @@
 // Copyright (c) 1992-1993 The Regents of the University of California.
 // All rights reserved.  See copyright.h for copyright notice and limitation 
 // of liability and disclaimer of warranty provisions.
-// equipo 1 actualización
-// Roberto Rodriguez
-// Milán Hector Alessandro
-// Tovar Ojeda Jorge
 
 #include "copyright.h"
 #include "system.h"

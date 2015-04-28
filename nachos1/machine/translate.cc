@@ -37,7 +37,6 @@
 // Routines for converting Words and Short Words to and from the
 // simulated machine's format of little endian.  These end up
 // being NOPs when the host machine is also little endian (DEC and Intel).
-
 unsigned int
 WordToHost(unsigned int word) {
 #ifdef HOST_IS_BIG_ENDIAN
@@ -207,19 +206,24 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
 // from the virtual address
     vpn = (unsigned) virtAddr / PageSize;
     offset = (unsigned) virtAddr % PageSize;
-    
-    if (tlb == NULL) {		// => page table => vpn is index into table
+
+    if (tlb == NULL) {		// => page table => vpn is index into table		
+ 	for (i = 0; i < NumPhysPages; i++){
+	     machine->contadores[i]++;
+	}
 	if (vpn >= pageTableSize) {
 	    DEBUG('a', "virtual page # %d too large for page table size %d!\n", 
 			virtAddr, pageTableSize);
 	    return AddressErrorException;
-	} else if (!pageTable[vpn].valid) {
+	} else if (!pageTable[vpn].valid) {	//Si se genero un fallo de pagina
+	    pagRequerida = vpn;	//Se asigna a una var global la pagina que genero el fallo
 	    DEBUG('a', "virtual page # %d too large for page table size %d!\n", 
 			virtAddr, pageTableSize);
-	    return PageFaultException;
+	    return PageFaultException;	//Genera un llamado a las excepciones
 	}
+        machine->contadores[pageTable[vpn].physicalPage] = 0;
 	entry = &pageTable[vpn];
-    } else {
+    } else {	
         for (entry = NULL, i = 0; i < TLBSize; i++)
     	    if (tlb[i].valid && (tlb[i].virtualPage == vpn)) {
 		entry = &tlb[i];			// FOUND!
@@ -232,7 +236,7 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
 						// but not in the TLB
 	}
     }
-
+ 
     if (entry->readOnly && writing) {	// trying to write to a read-only page
 	DEBUG('a', "%d mapped read-only at %d in TLB!\n", virtAddr, i);
 	return ReadOnlyException;
@@ -250,12 +254,13 @@ Machine::Translate(int virtAddr, int* physAddr, int size, bool writing)
 	entry->dirty = TRUE;
     *physAddr = pageFrame * PageSize + offset;
 
-	printf("Direccion Logica %d\n",virtAddr);
-	printf("Pagina %d\n", vpn);
-	printf("Desplazamiento %d\n",offset);
-	printf("Direccion Fisica %d\n",*physAddr);
+	//printf ("Dir Logica: %d   \tDir Fisica: %p \t", virtAddr, physAddr);
+	//printf ("No de Pagina: %d \tDesplazamiento: %d\n", pageFrame, offset); 
 
     ASSERT((*physAddr >= 0) && ((*physAddr + size) <= MemorySize));
     DEBUG('a', "phys addr = 0x%x\n", *physAddr);
+
     return NoException;
 }
+
+

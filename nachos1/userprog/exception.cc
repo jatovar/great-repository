@@ -24,79 +24,6 @@
 #include "copyright.h"
 #include "system.h"
 #include "syscall.h"
-extern int algoritmo;
-
-int FIFO(int nf)
-{
-    return (nf) % NumPhysPages;
-}
-
-int Reloj()
-{
-    int index = -1;
-    int frame = -1;
-    bool band = TRUE;
-    
-    do{
-        frame = FIFO(currentThread->space->nextFrame);
-        index = currentThread->space->PageLookUp(frame);
-        if(index != -1)
-        {
-            if(currentThread->space->pageTable[index].use == TRUE)
-            {
-                currentThread->space->pageTable[index].use = FALSE;
-                currentThread->space->nextFrame = currentThread->space->nextFrame + 1;
-                
-            }else
-            {
-                band = FALSE;
-            }
-        }
-                
-    }while(band);
-    return currentThread->space->pageTable[index].physicalPage;
-}
-//----------------------------------------------------------------------
-// PageFaultHandler
-// 	Método para manejar el fallo de página, del actual proceso en ejecución, se manda a cargar la 
-//	página que se necesita desde la memoria de intercambio
-//	
-void PageFaultHandler()
-{   
-    int ipageFault = machine->ReadRegister(BadVAddrReg)/PageSize;
-    printf("Van %d fallos de pagina\n",stats->numPageFaults);
-    //Se divide la dirección virtual / tamaño de la página (Eso nos da como resultado el indice de la pagina que provoco el fallo)    
-    int victima = -1;
-    if(stats->numPageFaults <= NumPhysPages)//Esquema de paginacion por demanda pura
-    {
-          //Se declara una variable estática para guardar el marco siguiente
-       // printf("Dirección virtual de la página que provocó el fallo = %d\n", machine->ReadRegister(BadVAddrReg));
-       // printf("Indice de la página que provoco el fallo = %d\n", ipageFault);
-       // printf("Indice del marco al que se va a cargar la página = %d\n", nextFrame);           
-        victima = FIFO(currentThread->space->nextFrame);
-        currentThread->space->LoadPage(ipageFault, victima);//Se carga en memoria principal el indice de la pagina y el marco
-        printf("Se metio la pagina: %d en el marco: %d\n",ipageFault,victima);
-
-    }else
-    {
-        switch(algoritmo)
-        {
-            case 1: 
-                victima = Reloj();        
-                printf("Victima reloj = %d\n",victima);
-                break;
-            case 2:
-                break;
-            case 3:
-                break;
-        }
-        currentThread->space->SwapPage(ipageFault,victima);
-        
-    }
-    currentThread->space->nextFrame++;
-        
-}
-
 
 //----------------------------------------------------------------------
 // ExceptionHandler
@@ -125,21 +52,24 @@ void
 ExceptionHandler(ExceptionType which)
 {
     int type = machine->ReadRegister(2);
-    if(which == PageFaultException) //Se captura la excepcion ya que se ignoro la traduccion desde la primer página(Paginacion por demanda pura)
-    {
-        stats->numPageFaults++;// Se aumenta el numero de fallos de pagina
-        PageFaultHandler();  
-    }else
-        {
-            if ((which == SyscallException) && (type == SC_Halt)) 
-            {
-                DEBUG('a', "Shutdown, initiated by user program.\n");
-                interrupt->Halt();
 
-            }else 
-                {
-                    printf("Unexpected user mode exception %d %d\n", which, type);
-                    ASSERT(FALSE);
-                }
-        }
+    if ((which == SyscallException) && (type == SC_Halt)) {	//Exepcion del sistema
+	DEBUG('a', "Shutdown, initiated by user program.\n");
+   	interrupt->Halt();
+    }else	//Fallo de pagina
+	if (which == PageFaultException)
+		switch(algReemplazo){
+			case 1:
+				machine->fifo(pagRequerida); //FIFO
+			break;
+			case 2:
+				machine->lru(pagRequerida); //LRU
+			break;
+			case 3:
+			break;
+		}
+     	else {	//Exepcion diferente
+		printf("Unexpected user mode exception %d %d\n", which, type);
+		ASSERT(FALSE);
+    }
 }

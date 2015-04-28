@@ -182,6 +182,13 @@ class Machine {
     TranslationEntry *pageTable;
     unsigned int pageTableSize;
 
+//Algoritmos de reemplazo
+    void fifo(int pagErronea);
+    void lru(int pagErronea);
+    void optimo(int pagErronea);
+    unsigned int numeroDePaginas;
+    int contadores[NumPhysPages];
+    int pagina[NumPhysPages];
   private:
     bool singleStep;		// drop back into the debugger after each
 				// simulated instruction

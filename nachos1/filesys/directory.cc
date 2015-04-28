@@ -115,6 +115,11 @@ Directory::Find(char *name)
     return -1;
 }
 
+void Directory::listaArchivos(){ //imprime los archivos que contiene en in UFD
+	for (int i = 0; i < tableSize; i++)
+		printf("%s\n",table[i].name);
+}
+
 //----------------------------------------------------------------------
 // Directory::Add
 // 	Add a file into the directory.  Return TRUE if successful;
@@ -127,7 +132,7 @@ Directory::Find(char *name)
 //----------------------------------------------------------------------
 
 bool
-Directory::Add(char *name, int newSector)
+Directory::Add(char *name, int newSector, bool esDirectorio)
 { 
     if (FindIndex(name) != -1)
 	return FALSE;
@@ -137,6 +142,8 @@ Directory::Add(char *name, int newSector)
             table[i].inUse = TRUE;
             strncpy(table[i].name, name, FileNameMaxLen); 
             table[i].sector = newSector;
+		table[i].directorio = esDirectorio;	//Asigna bandera esDirectorio
+		table[i].ufd = -1;			//El apuntador UFD se inicializa con -1 (null)
         return TRUE;
 	}
     return FALSE;	// no space.  Fix when we have extensible files.
@@ -167,11 +174,24 @@ Directory::Remove(char *name)
 //----------------------------------------------------------------------
 
 void
-Directory::List()
+Directory::List()	//List modificado para listar directorios MFD y UFD
 {
+   Directory* ufd;
+   OpenFile* dirUfd;
+
    for (int i = 0; i < tableSize; i++)
 	if (table[i].inUse)
-	    printf("%s\n", table[i].name);
+		if (!table[i].directorio)
+	    		printf("\t%s\n", table[i].name);
+		else{
+			printf("Usuario: %s\n", table[i].name);
+			dirUfd = new OpenFile(table[i].ufd);	//Abre el directorio contenido en el sector
+			ufd = new Directory(NumDirEntries);
+			ufd->FetchFrom(dirUfd);
+			ufd->List();
+			delete ufd;
+			delete dirUfd;
+		}
 }
 
 //----------------------------------------------------------------------
@@ -194,4 +214,40 @@ Directory::Print()
 	}
     printf("\n");
     delete hdr;
+}
+
+bool Directory::setApuntadorUFD(char* nombreDirectorio, int sector){	//Asigna el apuntador al sector UFD
+	bool res = false;
+
+	for (int i = 0; i < tableSize && !res; i++)
+		if (!strcmp(nombreDirectorio, table[i].name)) {
+	    		table[i].ufd = sector;
+			res = true;
+		}
+	return res;
+}
+
+int Directory::getApuntadorUFD(char* nombreDirectorio){	//regresa la direccion del sector apuntada por MFD a un UFD
+	int sector = -1;
+
+	for (int i = 0; i < tableSize && sector == -1; i++)
+		if (!strcmp(nombreDirectorio, table[i].name))
+	    		sector = table[i].ufd;
+	return sector;
+}
+
+int Directory::tamDirEntry(){	//Regresa el tamaño total de la entrada en directorio
+	return tableSize * sizeof(DirectoryEntry);
+}
+
+char* Directory::sectorIndex(int index){	//Busca un sector por indice y regresa el nombre de la entrada
+	char* nombre = 0;
+
+	if (table[index].inUse)
+		nombre = table[index].name;
+	return nombre;
+}
+
+bool Directory::valid(int index){	//Regresa el estado de uso de la tabla por medio de un indice
+	return table[index].inUse;
 }
